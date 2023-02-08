@@ -1,0 +1,11 @@
+GITLAB-CI 
+- The kubernetes cluster would need to be connected to gitlab before the pipeline can deploy to gitlab.
+
+AZURE-PIPELINES
+- The tasks that involve publishing and downloading articfacts are important in obtaining the manifest files which would be included in the project folder. 
+
+GITHUB-ACTIONS-WORKFLOW
+- The authentication details to connect the AKS cluster to github should be provided in the repository settings as secrets.
+
+JENKINS
+- Credentials should be configured for the pipeline stages that require authentication.
