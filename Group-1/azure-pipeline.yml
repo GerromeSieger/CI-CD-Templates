@@ -1,0 +1,116 @@
+# Docker
+# Build and push an image to Azure Container Registry
+# https://docs.microsoft.com/azure/devops/pipelines/languages/docker
+
+trigger:
+- master
+
+resources:
+- repo: self
+
+variables:
+  # Container registry service connection established during pipeline creation
+  dockerRegistryServiceConnection: '16d3a595-e73b-4945-8ef8-6afe91aa4f09'
+  containerRegistry: 'dockerhub1.azurecr.io'
+  tag: '$(Build.BuildId)'
+
+  # Agent VM image name
+  vmImageName: 'ubuntu-latest'
+
+stages:
+- stage: Test
+  displayName: Test the django & the react applications 
+  jobs:
+  - job: Tests
+    displayName: Unit Tests
+    pool:
+      vmImage: $(vmImageName)
+    steps:
+    - task: CmdLine@2
+      inputs:
+        script: 'pip install --no-cache-dir -r backend/requirements.txt'
+    - task: PythonScript@0
+      inputs:
+        scriptSource: 'filePath'
+        scriptPath: 'backend/accounts/tests.py'  
+          
+    - task: Npm@1
+      inputs:
+        command: 'install'
+        workingDir: 'frontend'
+    - task: Npm@1
+      inputs:
+        command: 'custom'
+        workingDir: 'frontend'
+        customCommand: 'test'
+
+- stage: Build
+  displayName: Build and push stage
+  jobs:
+  - job: Build
+    displayName: Build
+    pool:
+      vmImage: $(vmImageName)
+    steps:
+    - task: Docker@2
+      displayName: Build and push backend image to container registry
+      inputs:
+        command: buildAndPush
+        repository: $(backend-image)
+        dockerfile: '$(Build.SourcesDirectory)/subscription-api/Dockerfile'
+        containerRegistry: $(dockerRegistryServiceConnection)
+        tags: |
+          $(tag)
+
+    - task: Docker@2
+      displayName: Build and push frontend image to container registry
+      inputs:
+        command: buildAndPush
+        repository: $(frontend-image)
+        dockerfile: '$(Build.SourcesDirectory)/subscription-app/Dockerfile'
+        containerRegistry: $(dockerRegistryServiceConnection)
+        tags: |
+          $(tag)
+      
+- stage: Deploy_to_Staging
+  displayName: Deploy to a remote vm server 
+  jobs:
+  - job: Deploy_to_staging
+    displayName: Deploy to staging env
+    pool:
+      vmImage: $(vmImageName)
+    steps:
+    - task: DownloadSecureFile@1
+      name: ssh_key
+      inputs:
+        secureFile: 'ssh-key'
+    - script: |
+        sudo chmod 400 $(ssh_key.secureFilePath)
+        ssh -i $(ssh_key.secureFilePath) -o StrictHostKeyChecking=no user@ipaddress "
+          git clone <git-repo>
+          docker login -u $REGISTRY_USER -p $REGISTRY_PASSWORD
+          docker ps -aq | xargs docker stop | cd <cloned-repo> && docker-compose up -d" 
+
+- stage: Deploy_to_Production
+  displayName: Deploy to a remote vm server 
+  jobs:
+  - job: Deploy_to_Production
+    displayName: Deploy to prod env
+    pool:
+      vmImage: $(vmImageName)
+    steps:
+    - task: DownloadSecureFile@1
+      name: ssh_key
+      inputs:
+        secureFile: 'ssh-key'
+    - script: |
+        sudo chmod 400 $(ssh_key.secureFilePath)
+        ssh -i $(ssh_key.secureFilePath) -o StrictHostKeyChecking=no user@ipaddress "
+          git clone <git-repo>
+          docker login -u $REGISTRY_USER -p $REGISTRY_PASSWORD
+          docker ps -aq | xargs docker stop | cd <cloned-repo> && docker-compose up -d"     
+    - task: ManualValidation@0
+      inputs:
+        notifyUsers: 'vsifah@outlook.com'
+        instructions: 'Please review and approve deployment'
+        onTimeout: 'resume'          

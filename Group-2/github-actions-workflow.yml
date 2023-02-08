@@ -1,0 +1,115 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+    
+jobs:
+  Test: 
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+        
+      - name: Setup Node
+        uses: actions/setup-node@v1
+        with:
+          node-version: '13.12.0'
+          
+      - name: Install Dependencies
+        run: cd ./frontend && npm install
+      
+      - name: Run Tests for the frontend
+        run: cd ./frontend && npm test
+
+      - name: Setup Python
+        uses: actions/setup-python@v4.5.0
+        
+      - name: Install Dependencies
+        run: pip install --no-cache-dir -r ./backend/requirements.txt
+      
+      - name: Run tests
+        run: python ./backend/accounts/tests.py    
+
+  Build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+        
+      - name: Set up Docker Build
+        uses: docker/setup-buildx-action@v2
+       
+      - name: Login to DockerHub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_PASSWORD }}
+          
+      - name: Build and push backend
+        uses: docker/build-push-action@v3
+        with:
+          context: ./backend
+          push: true
+          tags: ${{ secrets.BACKEND_IMAGE }}
+       
+      - name: Build and push frontend
+        uses: docker/build-push-action@v3
+        with:
+          context: ./frontend
+          push: true
+          tags: ${{ secrets.FRONTEND_IMAGE }}
+    needs: Test      
+
+  Deploy_Staging:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Azure Kubernetes set context
+        uses: Azure/aks-set-context@v3
+        with:
+          resource-group: ${{ secrets.AZURE_RESOURCE_GROUP }}
+          cluster-name: ${{ secrets.AZURE_K8S_CLUSTER_NAME }}
+          subscription: ${{ secrets.AZURE_SUBSCRIPTION }}
+          
+      - name: Helm tool installer
+        uses: Azure/setup-helm@v3
+        
+      - name: Update helm repo
+        run: helm repo add nginx-stable https://helm.nginx.com/stable && helm repo update
+      
+      - name: Install helm chart 
+        run: helm install my-release nginx-stable/nginx-ingress
+    needs: [Test, Build]      
+
+  Deploy_Production:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Azure Kubernetes set context
+        uses: Azure/aks-set-context@v3
+        with:
+          resource-group: ${{ secrets.AZURE_RESOURCE_GROUP }}
+          cluster-name: ${{ secrets.AZURE_K8S_CLUSTER_NAME }}
+          subscription: ${{ secrets.AZURE_SUBSCRIPTION }}
+          
+      - name: Helm tool installer
+        uses: Azure/setup-helm@v3
+        
+      - name: Update helm repo
+        run: helm repo add nginx-stable https://helm.nginx.com/stable && helm repo update
+      
+      - name: Install helm chart 
+        run: helm install my-release nginx-stable/nginx-ingress
+      
+      - name: Wait for approval
+        uses: trstringer/manual-approval@v1
+        with:
+          secret: ${{ secrets.DEPLOY_TOKEN }}
+          approvers: github-user
+          minimum-approvals: 2
+          timeout-minutes: 180
+          permissions:
+            issues: write
+    needs: [Test, Build, Deploy-Staging] 
+

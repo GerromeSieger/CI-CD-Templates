@@ -1,0 +1,58 @@
+pipeline {
+    agent any
+    stages {
+        stage('Test-Frontend') {
+            agent {
+                docker {
+                    image 'node:16.13.1-alpine'
+                }
+            }            
+            steps {
+                sh 'cd frontend-folder'
+                sh 'npm install'
+                sh 'npm test'              
+            }
+        }
+        stage('Test-Backend') {
+            agent {
+                docker {
+                    image 'python:3.12.0a4-slim-buster'
+                }
+            }             
+            steps {
+                sh 'cd backend-folder'
+                sh 'python test.py'           
+            }
+        }        
+        stage('Build Images') {
+            agent any         
+            steps {
+                sh 'cd backend-folder && docker build -t backend-image:tag .'
+                sh 'cd frontend-folder && docker build -t frontend-image:tag .'
+                withCredentials([
+                    usernamePassword(credentials: 'dockerhub', usernameVariable: USER, passwordVariable: PWD)
+                ])
+                sh "docker login -u ${USER} -p ${PWD} && docker push backend-image:tag" 
+                sh "docker login -u ${USER} -p ${PWD} && docker push frontend-image:tag"                    }                
+                       
+        }  
+
+        stage('Deploy to Staging') {
+            agent any          
+            steps {
+                sshagent(credentials: ['server_ssh_key']) {
+                   sh 'ssh -o StrictHostKeyChecking=no user@remote_server "cd project_directory && docker-compose up -d"'
+                    }
+            }
+        }
+        stage('Deploy to Production') {
+            agent any          
+            steps {
+                sshagent(credentials: ['server_ssh_key']) {
+                   sh 'ssh -o StrictHostKeyChecking=no user@remote_server "cd project_directory && docker-compose up -d"'
+                    }
+            }
+        }        
+    }
+}
+  
