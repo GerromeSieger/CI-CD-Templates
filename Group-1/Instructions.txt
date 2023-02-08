@@ -1,0 +1,13 @@
+GITLAB-CI 
+- Variables should be configured for the project in the gitlab settings for ci/cd.
+- Pushing to the main branch directly should be turn off so as to only run the deploy to production job on the main branch after merge requests are approved.
+
+AZURE-PIPELINES
+- While some variables are already pre-configured it is important to still configure other variables.
+- The task to download secure file can be configured by adding the private key for the vm that would be connected to.
+
+GITHUB-ACTIONS-WORKFLOW
+- Be sure to configure secrets in the repository settings.
+
+JENKINS
+- Credentials should be configured for the pipeline stages that require authentication.

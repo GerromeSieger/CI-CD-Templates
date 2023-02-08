@@ -3,7 +3,7 @@ stages:
   - build
   - deploy
 
-#test the frontend application (react, vuejs, angular)
+#test the frontend application (react)
 test_frontend:
   stage: test
   image: node:13.12.0-alpine
