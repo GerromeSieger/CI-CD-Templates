@@ -1,0 +1,60 @@
+pipeline {
+    agent any
+    stages {
+        stage('Test-Frontend') {
+            agent {
+                docker {
+                    image 'node:16.13.1-alpine'
+                }
+            }            
+            steps {
+                sh 'cd frontend-folder'
+                sh 'npm install'
+                sh 'npm test'              
+            }
+        }
+        stage('Test-Backend') {
+            agent {
+                docker {
+                    image 'python:3.12.0a4-slim-buster'
+                }
+            }             
+            steps {
+                sh 'cd backend-folder'
+                sh 'python test.py'           
+            }
+        }        
+        stage('Build Images') {
+            agent any         
+            steps {
+                sh 'cd backend-folder && docker build -t backend-image:tag .'
+                sh 'cd frontend-folder && docker build -t frontend-image:tag .'
+                withCredentials([
+                    usernamePassword(credentials: 'dockerhub', usernameVariable: USER, passwordVariable: PWD)
+                ])
+                sh "docker login -u ${USER} -p ${PWD} && docker push backend-image:tag" 
+                sh "docker login -u ${USER} -p ${PWD} && docker push frontend-image:tag"                    }                
+                       
+        }  
+        stage('Deploy to Staging') {
+            agent any          
+            steps {
+                withCredentials([azureServicePrincipal(credentialsId: '<service_principal_id>', tenantId: '<tenant_id>', subscriptionId: '<subscription_id>', azureEnvironment: 'AZURE')]) {
+                    sh 'az aks get-credentials --resource-group <resource_group> --name <aks_cluster_name>'
+                    sh 'helm repo update'
+                    sh 'helm install --name my-release my-chart'
+                }
+            }
+        }
+        stage('Deploy to Production') {
+            agent any          
+            steps {
+                withCredentials([azureServicePrincipal(credentialsId: '<service_principal_id>', tenantId: '<tenant_id>', subscriptionId: '<subscription_id>', azureEnvironment: 'AZURE')]) {
+                    sh 'az aks get-credentials --resource-group <resource_group> --name <aks_cluster_name>'
+                    sh 'helm repo update'
+                    sh 'helm install --name my-release my-chart'
+                }
+            }
+        }
+    }
+}        
