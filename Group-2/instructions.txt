@@ -1,3 +1,5 @@
+For this second group of pipeline templates the deploy stage would be to a kubernetes cluster and all these platforms for ci/cd have their various ways to connect to a kubernetes cluster.
+
 GITLAB-CI 
 - The kubernetes cluster would need to be connected to gitlab before the pipeline can deploy to gitlab.
 
